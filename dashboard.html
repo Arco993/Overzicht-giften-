@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dashboard</title>
+    <link href="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/css/bootstrap.min.css" rel="stylesheet">
+</head>
+<body>
+    <div class="container">
+        <h1 class="mt-5">Gifts Dashboard</h1>
+        <div class="form-group">
+            <label for="startDate">Start Date:</label>
+            <input type="date" class="form-control" id="startDate">
+        </div>
+        <div class="form-group">
+            <label for="endDate">End Date:</label>
+            <input type="date" class="form-control" id="endDate">
+        </div>
+        <button class="btn btn-primary" id="filterBtn">Filter</button>
+        <button class="btn btn-success" id="exportBtn">Export to CSV</button>
+
+        <table class="table table-striped mt-4" id="donationTable">
+            <thead>
+                <tr>
+                    <th>Rapdatum</th>
+                    <th>Kostendrager</th>
+                    <th>Description</th>
+                    <th>Amount</th>
+                </tr>
+            </thead>
+            <tbody></tbody>
+        </table>
+
+        <div id="totals" class="mt-3"></div>
+    </div>
+
+    <script src="https://code.jquery.com/jquery-3.5.1.min.js"></script>
+    <script src="https://unpkg.com/xlsx/dist/xlsx.full.min.js"></script>
+    <script>
+        const excelFileUrl = 'https://raw.githubusercontent.com/Arco993/Overzicht-giften-/main/Test%20Dashboard%20Giften.xlsx';
+
+        function fetchExcelData() {
+            fetch(excelFileUrl)
+                .then(response => response.arrayBuffer())
+                .then(data => {
+                    const workbook = XLSX.read(data);
+                    const firstSheet = workbook.Sheets["Query 1"];
+                    const jsonData = XLSX.utils.sheet_to_json(firstSheet);
+                    displayData(jsonData);
+                });
+        }
+
+        function displayData(data) {
+            // Filter and sort data based on user's input
+            const filteredData = data.filter(row => row.Debit > 0);
+            const startDate = $('#startDate').val();
+            const endDate = $('#endDate').val();
+
+            let total = 0;
+            const groupedData = {};
+
+            filteredData.forEach(row => {
+                const date = new Date(row.rapdatum);
+                if ((startDate && date < new Date(startDate)) || (endDate && date > new Date(endDate))) 
+                    return;
+
+                if (!groupedData[row.kstdrcode]) {
+                    groupedData[row.kstdrcode] = [];
+                }
+                groupedData[row.kstdrcode].push(row);
+            });
+
+            const tbody = $('#donationTable tbody');
+            tbody.empty();
+
+            Object.keys(groupedData).forEach(kstdrcode => {
+                const rows = groupedData[kstdrcode];
+                let subtotal = 0;
+
+                rows.forEach(row => {
+                    subtotal += row.Debit;
+                    total += row.Debit;
+                    tbody.append(`
+                        <tr>
+                            <td>${row.rapdatum}</td>
+                            <td>${row.kstdrcode}</td>
+                            <td>${row.oms25}</td>
+                            <td>${row.Debit}</td>
+                        </tr>
+                    `);
+                });
+
+                tbody.append(`
+                    <tr>
+                        <td colspan="3" class="font-weight-bold">Subtotal for ${kstdrcode}</td>
+                        <td class="font-weight-bold">${subtotal}</td>
+                    </tr>
+                `);
+            });
+
+            $('#totals').html(`<h4>Total Amount: ${total}</h4>`);
+        }
+
+        $('#filterBtn').click(fetchExcelData);
+        $('#exportBtn').click(() => {
+            // Export table to CSV functionality
+            const rows = document.querySelectorAll('#donationTable tr');
+            let csvContent = "data:text/csv;charset=utf-8,";
+            rows.forEach(row => {
+                const columns = row.querySelectorAll('th, td');
+                const csvRow = Array.from(columns).map(col => col.innerText).join(',');
+                csvContent += csvRow + "\r\n";
+            });
+            const encodedUri = encodeURI(csvContent);
+            const link = document.createElement('a');
+            link.setAttribute('href', encodedUri);
+            link.setAttribute('download', 'donation_data.csv');
+            document.body.appendChild(link);
+            link.click();
+        });
+
+        fetchExcelData();
+    </script>
+</body>
+</html>
